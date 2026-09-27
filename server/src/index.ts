@@ -42,6 +42,9 @@ async function pollForever() {
       if (stopping) return;
       if (error instanceof GrammyError && error.error_code === 409) {
         console.warn("Another instance is still polling; retrying in 5s");
+      } else if (error instanceof GrammyError && error.error_code === 401) {
+        console.error("Telegram rejected BOT_TOKEN (401). Fix it in the environment variables; retrying in 60s");
+        await sleep(55000);
       } else {
         console.error("Bot stopped, retrying in 5s:", error);
       }

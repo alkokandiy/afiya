@@ -55,14 +55,29 @@ npm test                                         # both test suites
 Without the dev server: `npm run build && npm start` serves the built shop from the server itself on :8000,
 so tunnel port 8000 instead.
 
+## Deploying to Railway
+
+The whole app is one Railway service: the server serves the shop, the API and the bot. `railway.json` holds the
+build and start commands.
+
+1. New project → **Deploy from GitHub repo** → this repository (root directory: the repo root).
+2. **Settings → Networking → Generate Domain.** That `https://….up.railway.app` address becomes the shop's URL automatically.
+3. **Add a volume** (right-click the service → Attach volume, mount path e.g. `/data`). The database and uploaded
+   photos live there; without it they are wiped on every deploy (the logs warn about this).
+4. **Variables:** `BOT_TOKEN` and `ADMIN_CHAT_IDS`. `PORT`, `CLIENT_URL` and `DATA_DIR` come from Railway.
+5. Deploy. `/health` is the health check; the bot's menu button is pointed at the Railway URL on start.
+
+Only one copy of the bot can poll Telegram at a time: stop a local `npm run dev:server` using the same token while
+Railway runs it (or use a second test bot locally).
+
 ## Configuration (`server/.env`)
 
 | Variable | |
 |---|---|
 | `BOT_TOKEN` | from @BotFather |
 | `ADMIN_CHAT_IDS` | comma-separated Telegram user IDs of the owners (always admin) |
-| `CLIENT_URL` | HTTPS URL of the shop; used for every web-app button |
-| `DATA_DIR` | database (`afiya.db`) and uploaded photos (`uploads/`), default `./data` — back this folder up |
+| `CLIENT_URL` | HTTPS URL of the shop; used for every web-app button (Railway: its public domain) |
+| `DATA_DIR` | database (`afiya.db`) and uploaded photos (`uploads/`), default `./data` (Railway: the volume) — back this up |
 | `PORT` | default `8000` |
 
 Shop phone, pickup address and hours, delivery fee and the low-stock threshold are set in Admin → Sozlamalar.
