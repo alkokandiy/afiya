@@ -2,9 +2,10 @@
   "name": "afiya",
   "private": true,
   "type": "module",
-  "description": "Afiya Market \u2014 Telegram Mini App storefront (client) + order bot (server)",
+  "description": "Afiya Market — Telegram Mini App storefront (client) + order bot (server)",
   "scripts": {
     "install:all": "npm --prefix client install && npm --prefix server install",
+    "ci:all": "npm --prefix client ci --include=dev && npm --prefix server ci --include=dev",
     "dev:client": "npm --prefix client run dev",
     "dev:server": "npm --prefix server run dev",
     "build": "npm --prefix client run build && npm --prefix server run build",
@@ -12,5 +13,9 @@
     "lint": "npm --prefix client run lint",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
     "test": "npm --prefix client test && npm --prefix server test"
-  }
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "npm@11.19.0"
 }

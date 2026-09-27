@@ -16,7 +16,7 @@ const schema = z.object({
   CLIENT_URL: z
     .url({ protocol: /^https$/, error: "CLIENT_URL must be an https:// URL (Telegram only opens Mini Apps over HTTPS)" })
     .transform((url) => url.replace(/\/+$/, "")),
-  DATA_DIR: z.string().default("./data"),
+  DATA_DIR: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(8000),
 });
 
@@ -27,10 +27,19 @@ export interface Config {
   /** Holds afiya.db and uploads/. */
   dataDir: string;
   port: number;
+  /** Running on Railway without a volume: the database would be wiped on every deploy. */
+  ephemeralData: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const result = schema.safeParse(env);
+  // On Railway these come for free: the service's public domain and the mounted volume.
+  const withDefaults = {
+    ...env,
+    CLIENT_URL: env.CLIENT_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : undefined),
+    DATA_DIR: env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || "./data",
+  };
+
+  const result = schema.safeParse(withDefaults);
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  ${issue.path.join(".")}: ${issue.message}`);
     throw new Error(`Invalid environment configuration:\n${problems.join("\n")}\nSee server/.env.example.`);
@@ -42,5 +51,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     clientUrl: parsed.CLIENT_URL,
     dataDir: parsed.DATA_DIR,
     port: parsed.PORT,
+    ephemeralData: !!env.RAILWAY_ENVIRONMENT_NAME && !env.RAILWAY_VOLUME_MOUNT_PATH,
   };
 }
