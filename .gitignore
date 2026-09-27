@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Bot runtime data (customer names, phones, locations) — never commit
+server/users.json
+
+# SQLite database (see DATABASE_PATH)
+server/data/
+*.tsbuildinfo

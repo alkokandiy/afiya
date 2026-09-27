@@ -1,0 +1,21 @@
+.cart__container {
+    display: flex;
+    flex-direction: column; /* Stack items vertically */
+    justify-content: center;
+    align-items: center;
+    margin-top: 10px;
+    padding-bottom: 20px;
+}
+
+.cart__price {
+    font-size: 18px; /* Make price more readable */
+    font-weight: bold;
+    color: #145a32;
+    margin-bottom: 12px; /* Add space between price and button */
+}
+
+button {
+    padding: 10px 20px; /* Increase button padding */
+    font-size: 16px;
+    border-radius: 6px;
+}
