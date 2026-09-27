@@ -98,6 +98,10 @@ const migrations: ((db: DB) => void)[] = [
       insertProduct.run(id, title, titleCyr, price, `/img/products/${id}.webp`, categoryId, index);
     });
   },
+  // Cyrillic became the default script. Nobody had picked one yet, so everyone moves over.
+  (db) => {
+    db.exec("UPDATE users SET script = 'cyrl'");
+  },
 ];
 
 const initialCategories: [id: number, name: string][] = [

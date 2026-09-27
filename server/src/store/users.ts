@@ -43,7 +43,7 @@ export class UserStore {
   touch(id: number, firstName: string, username: string | null): User {
     this.db
       .prepare(
-        `INSERT INTO users (id, first_name, username) VALUES (?, ?, ?)
+        `INSERT INTO users (id, first_name, username, script) VALUES (?, ?, ?, 'cyrl')
          ON CONFLICT (id) DO UPDATE SET
            first_name = excluded.first_name, username = excluded.username, last_seen_at = datetime('now')`,
       )

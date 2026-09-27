@@ -131,7 +131,7 @@ export function Checkout(props: { lines: CartLine[]; shop: ShopInfo; me: Me | nu
           <>
             <Field
               label={t("Manzil")}
-              hint={t("Ko'cha, uy raqami va mo'ljal")}
+              hint={t("Ko'cha, uy, mo'ljal")}
               error={errors.address && t(errors.address)}
             >
               <textarea className="input" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" />
@@ -150,9 +150,9 @@ export function Checkout(props: { lines: CartLine[]; shop: ShopInfo; me: Me | nu
 
       <section className="step">
         <h3 className="step__title"><span className="step__number">3</span>{t("To'lov")}</h3>
-        <p className="step__hint">{t(delivery ? "Pulni mahsulotni olganingizda to'laysiz." : "Pulni olib ketayotganingizda to'laysiz.")}</p>
+        <p className="step__hint">{t("Pulni mahsulotni olganda to'laysiz.")}</p>
         <ChoiceCard icon="💵" title={t("Naqd pul")} selected={payment === "cash"} onSelect={() => setPayment("cash")} />
-        <ChoiceCard icon="💳" title={t("Kartaga o'tkazma")} subtitle={t("Click, Payme yoki bank ilovasi orqali")} selected={payment === "transfer"} onSelect={() => setPayment("transfer")} />
+        <ChoiceCard icon="💳" title={t("Kartaga o'tkazma")} selected={payment === "transfer"} onSelect={() => setPayment("transfer")} />
       </section>
 
       <Field label={t("Izoh (shart emas)")}>

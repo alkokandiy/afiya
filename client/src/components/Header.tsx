@@ -9,7 +9,7 @@ export function Header() {
       <img className="header__logo" src="/img/logo.webp" alt="" />
       <span className="header__title">Afiya Market</span>
       <div className="script-switch" role="group" aria-label={t("Yozuv")}>
-        {(["latn", "cyrl"] as const).map((value) => (
+        {(["cyrl", "latn"] as const).map((value) => (
           <button
             key={value}
             type="button"

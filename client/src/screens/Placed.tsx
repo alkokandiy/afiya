@@ -18,8 +18,8 @@ export function Placed(props: { order: Order; shop: ShopInfo; onOrders: () => vo
       <p className="placed__next">
         {t(
           pickup
-            ? "Buyurtmangiz tayyor bo'lganda Telegram orqali xabar yuboramiz. Keyin olib ketishingiz mumkin."
-            : "Tez orada yetkazib beramiz. Har bir o'zgarish haqida Telegram orqali xabar yuboramiz.",
+            ? "Tayyor bo'lganda Telegramda xabar beramiz."
+            : "Tez orada yetkazib beramiz.",
         )}
       </p>
       {props.shop.phone ? (

@@ -4,7 +4,7 @@ import { titleIn, type Script } from "../../../shared/types";
 
 // Every string in the app is written in Uzbek Latin; t() converts it when the reader chose Cyrillic.
 export const ScriptContext = createContext<{ script: Script; setScript: (script: Script) => void }>({
-  script: "latn",
+  script: "cyrl",
   setScript: () => {},
 });
 

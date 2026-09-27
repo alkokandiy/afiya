@@ -43,11 +43,12 @@ describe("customer", () => {
     expect(cancelled.json.status).toBe("cancelled");
   });
 
-  it("remembers the script and the profile", async () => {
+  it("starts new customers in Cyrillic and remembers their choice and profile", async () => {
+    expect((await t.call("GET", "/api/me", { as: CUSTOMER })).json.script).toBe("cyrl");
     await t.call("POST", "/api/orders", { as: CUSTOMER, body: order });
-    await t.call("PATCH", "/api/me", { as: CUSTOMER, body: { script: "cyrl" } });
+    await t.call("PATCH", "/api/me", { as: CUSTOMER, body: { script: "latn" } });
     expect((await t.call("GET", "/api/me", { as: CUSTOMER })).json).toEqual({
-      id: CUSTOMER, name: "Ali", phone: "+998901234567", address: "", script: "cyrl", roles: [],
+      id: CUSTOMER, name: "Ali", phone: "+998901234567", address: "", script: "latn", roles: [],
     });
   });
 

@@ -43,7 +43,7 @@ export default function App() {
   const catalog = useAsync(api.catalog);
   const me = useAsync(() => (inTelegram ? api.me() : Promise.resolve(null)));
   const [chosenScript, setChosenScript] = useState<Script | null>(storedScript);
-  const script = chosenScript ?? me.data?.script ?? "latn";
+  const script = chosenScript ?? me.data?.script ?? "cyrl";
 
   const setScript = useCallback((value: Script) => {
     setChosenScript(value);

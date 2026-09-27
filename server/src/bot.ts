@@ -3,9 +3,7 @@ import { toCyrillic } from "../../shared/translit.js";
 import { htmlToCyrillic } from "./notifier.js";
 import type { Store } from "./store/index.js";
 
-const WELCOME = `Assalomu alaykum! <b>Afiya Market</b>ga xush kelibsiz.
-
-Mahsulotlarni ko'rish va buyurtma berish uchun pastdagi <b>«Do'konni ochish»</b> tugmasini bosing.`;
+const WELCOME = `Assalomu alaykum! 👋\n\n<b>Buyurtma berish uchun pastdagi tugmani bosing</b> 👇`;
 
 export function createBot(bot: Bot, store: Store, clientUrl: string): Bot {
   const shopKeyboard = (cyrillic: boolean) =>
