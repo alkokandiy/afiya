@@ -16,7 +16,7 @@ const schema = z.object({
   CLIENT_URL: z
     .url({ protocol: /^https$/, error: "CLIENT_URL must be an https:// URL (Telegram only opens Mini Apps over HTTPS)" })
     .transform((url) => url.replace(/\/+$/, "")),
-  DATABASE_PATH: z.string().default("./data/afiya.db"),
+  DATA_DIR: z.string().default("./data"),
   PORT: z.coerce.number().int().positive().default(8000),
 });
 
@@ -24,7 +24,8 @@ export interface Config {
   botToken: string;
   adminChatIds: number[];
   clientUrl: string;
-  databasePath: string;
+  /** Holds afiya.db and uploads/. */
+  dataDir: string;
   port: number;
 }
 
@@ -39,7 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     botToken: parsed.BOT_TOKEN,
     adminChatIds: parsed.ADMIN_CHAT_IDS,
     clientUrl: parsed.CLIENT_URL,
-    databasePath: parsed.DATABASE_PATH,
+    dataDir: parsed.DATA_DIR,
     port: parsed.PORT,
   };
 }

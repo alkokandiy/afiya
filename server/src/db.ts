@@ -8,86 +8,127 @@ export type DB = Database.Database;
 const migrations: ((db: DB) => void)[] = [
   (db) => {
     db.exec(`
+      CREATE TABLE categories (
+        id   INTEGER PRIMARY KEY,
+        name TEXT    NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0
+      );
+
       CREATE TABLE products (
-        id      INTEGER PRIMARY KEY,
-        title   TEXT    NOT NULL,
-        price   INTEGER NOT NULL CHECK (price > 0),
-        image   TEXT    NOT NULL,
-        active  INTEGER NOT NULL DEFAULT 1,
-        sort    INTEGER NOT NULL DEFAULT 0
+        id          INTEGER PRIMARY KEY,
+        title       TEXT    NOT NULL,
+        title_cyr   TEXT    NOT NULL DEFAULT '',     -- optional hand-written Cyrillic name
+        price       INTEGER NOT NULL CHECK (price > 0),
+        image       TEXT    NOT NULL DEFAULT '',
+        category_id INTEGER REFERENCES categories (id) ON DELETE SET NULL,
+        stock       INTEGER CHECK (stock >= 0),          -- NULL: not tracked
+        active      INTEGER NOT NULL DEFAULT 1,
+        sort        INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE TABLE customers (
-        chat_id    INTEGER PRIMARY KEY,
-        name       TEXT NOT NULL,
-        phone      TEXT NOT NULL,
-        address    TEXT,
-        latitude   REAL,
-        longitude  REAL,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-
-      CREATE TABLE checkout_sessions (
-        chat_id    INTEGER PRIMARY KEY,
-        step       TEXT NOT NULL,
-        items      TEXT NOT NULL,
-        draft      TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      -- Everyone who opened the shop (Telegram user id). Staff are users with roles.
+      CREATE TABLE users (
+        id           INTEGER PRIMARY KEY,
+        first_name   TEXT    NOT NULL DEFAULT '',
+        username     TEXT,
+        name         TEXT    NOT NULL DEFAULT '',
+        phone        TEXT    NOT NULL DEFAULT '',
+        address      TEXT    NOT NULL DEFAULT '',
+        script       TEXT    NOT NULL DEFAULT 'latn',
+        roles        TEXT    NOT NULL DEFAULT '',      -- comma-separated
+        created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+        last_seen_at TEXT    NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE TABLE orders (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        chat_id    INTEGER NOT NULL,
-        name       TEXT    NOT NULL,
-        phone      TEXT    NOT NULL,
-        address    TEXT,
-        latitude   REAL,
-        longitude  REAL,
-        total      INTEGER NOT NULL,
-        status     TEXT    NOT NULL DEFAULT 'new',
-        created_at TEXT    NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL REFERENCES users (id),
+        status       TEXT    NOT NULL DEFAULT 'new',
+        fulfillment  TEXT    NOT NULL,
+        payment      TEXT    NOT NULL,
+        paid         INTEGER NOT NULL DEFAULT 0,
+        name         TEXT    NOT NULL,
+        phone        TEXT    NOT NULL,
+        address      TEXT    NOT NULL DEFAULT '',
+        latitude     REAL,
+        longitude    REAL,
+        note         TEXT    NOT NULL DEFAULT '',
+        subtotal     INTEGER NOT NULL,
+        delivery_fee INTEGER NOT NULL DEFAULT 0,
+        total        INTEGER NOT NULL,
+        driver_id    INTEGER REFERENCES users (id),
+        created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
       );
-      CREATE INDEX orders_chat_id ON orders (chat_id);
+      CREATE INDEX orders_user_id ON orders (user_id);
+      CREATE INDEX orders_status ON orders (status);
 
       CREATE TABLE order_items (
         order_id   INTEGER NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL,
         title      TEXT    NOT NULL,
+        title_cyr  TEXT    NOT NULL DEFAULT '',
         price      INTEGER NOT NULL,
         quantity   INTEGER NOT NULL
       );
       CREATE INDEX order_items_order_id ON order_items (order_id);
+
+      -- Who moved each order to which status, and when.
+      CREATE TABLE order_events (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id   INTEGER NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+        status     TEXT    NOT NULL,
+        user_id    INTEGER,
+        created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
 
-    const insert = db.prepare("INSERT INTO products (id, title, price, image, sort) VALUES (?, ?, ?, ?, ?)");
-    initialProducts.forEach(([id, title, price], index) => {
-      insert.run(id, title, price, `/img/products/${id}.webp`, index);
+    const insertCategory = db.prepare("INSERT INTO categories (id, name, sort) VALUES (?, ?, ?)");
+    initialCategories.forEach(([id, name], index) => insertCategory.run(id, name, index));
+
+    const insertProduct = db.prepare(
+      "INSERT INTO products (id, title, title_cyr, price, image, category_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+    initialProducts.forEach(([id, title, titleCyr, price, categoryId], index) => {
+      insertProduct.run(id, title, titleCyr, price, `/img/products/${id}.webp`, categoryId, index);
     });
   },
 ];
 
-// The catalog that used to be hardcoded in the client. Edit prices afterwards with the bot's admin commands.
-const initialProducts: [id: number, title: string, price: number][] = [
-  [1, "Pushti Nexx (Extra)", 70000],
-  [2, "Ko'k Nexx (Extra)", 70000],
-  [3, "Ko'k Nexx 5L", 55000],
-  [4, "Nexx Kirsovun 5L", 45000],
-  [5, "Nexx Kirsovun", 12000],
-  [6, "Nexx Kirsovun (Zangor)", 12000],
-  [7, "Ko'k Nexx 1L", 15000],
-  [8, "Dur 1L", 17000],
-  [9, "Dur 2.5L", 34000],
-  [10, "Idish Gel (Sariq)", 9000],
-  [11, "Idish Gel (Qizil)", 9000],
-  [12, "Idish Gel (Yashil)", 9000],
-  [13, "Dur Sovun (Shaftoli)", 9000],
-  [14, "Sovun Dur (Pushti)", 9000],
-  [15, "Sovun Dur (Qizil)", 9000],
-  [16, "Raksha", 8000],
-  [17, "Parashok (Avtomat)", 13000],
-  [18, "Belizna", 8000],
-  [19, "Nexx Gel 2.5L", 35000],
+const initialCategories: [id: number, name: string][] = [
+  [1, "Kir yuvish"],
+  [2, "Idish yuvish"],
+  [3, "Sovun"],
+  [4, "Tozalash"],
+];
+
+// Starting catalog; edit everything afterwards from the Admin screen.
+// Brand names don't transliterate well ("Nexx" → "Нехх"), so the Cyrillic names are written by hand.
+const initialProducts: [id: number, title: string, titleCyr: string, price: number, categoryId: number][] = [
+  [1, "Pushti Nexx (Extra)", "Пушти Некс (Экстра)", 70000, 1],
+  [2, "Ko'k Nexx (Extra)", "Кўк Некс (Экстра)", 70000, 1],
+  [3, "Ko'k Nexx 5L", "Кўк Некс 5Л", 55000, 1],
+  [4, "Nexx Kirsovun 5L", "Некс Кирсовун 5Л", 45000, 1],
+  [5, "Nexx Kirsovun", "Некс Кирсовун", 12000, 1],
+  [6, "Nexx Kirsovun (Zangor)", "Некс Кирсовун (Зангор)", 12000, 1],
+  [7, "Ko'k Nexx 1L", "Кўк Некс 1Л", 15000, 1],
+  [8, "Dur 1L", "Дур 1Л", 17000, 3],
+  [9, "Dur 2.5L", "Дур 2.5Л", 34000, 3],
+  [10, "Idish Gel (Sariq)", "Идиш гел (Сариқ)", 9000, 2],
+  [11, "Idish Gel (Qizil)", "Идиш гел (Қизил)", 9000, 2],
+  [12, "Idish Gel (Yashil)", "Идиш гел (Яшил)", 9000, 2],
+  [13, "Dur Sovun (Shaftoli)", "Дур совун (Шафтоли)", 9000, 3],
+  [14, "Sovun Dur (Pushti)", "Совун Дур (Пушти)", 9000, 3],
+  [15, "Sovun Dur (Qizil)", "Совун Дур (Қизил)", 9000, 3],
+  [16, "Raksha", "Ракша", 8000, 4],
+  [17, "Parashok (Avtomat)", "Порошок (Автомат)", 13000, 1],
+  [18, "Belizna", "Белизна", 8000, 4],
+  [19, "Nexx Gel 2.5L", "Некс гел 2.5Л", 35000, 1],
 ];
 
 export function openDatabase(file: string): DB {

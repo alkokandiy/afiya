@@ -1,27 +1,32 @@
 import { Bot } from "grammy";
-import { createApp } from "./api.js";
-import { createBot, registerCommands } from "./bot.js";
-import { Checkout } from "./checkout.js";
+import path from "node:path";
+import { createBot, registerBotUi } from "./bot.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
-import { Store } from "./store.js";
+import { createApp } from "./http/app.js";
+import { TelegramNotifier } from "./notifier.js";
+import { OrderService } from "./order-service.js";
+import { Store } from "./store/index.js";
 
 const config = loadConfig();
-const db = openDatabase(config.databasePath);
+const db = openDatabase(path.join(config.dataDir, "afiya.db"));
 const store = new Store(db);
 
 const bot = new Bot(config.botToken);
-const checkout = new Checkout(store, bot.api, config.adminChatIds);
-createBot(bot, store, checkout, config);
+const orders = new OrderService(store, new TelegramNotifier(bot.api, store, config.clientUrl), config.adminChatIds);
+createBot(bot, store, config.clientUrl);
 
-const server = createApp(store, checkout, config).listen(config.port, () => {
-  console.log(`HTTP API listening on :${config.port}`);
+const app = createApp(store, orders, {
+  botToken: config.botToken,
+  ownerIds: config.adminChatIds,
+  uploadsDir: path.resolve(config.dataDir, "uploads"),
+  // npm scripts run with server/ as the working directory.
+  clientDist: path.resolve("../client/dist"),
 });
+const server = app.listen(config.port, () => console.log(`HTTP API listening on :${config.port}`));
 
-await registerCommands(bot, config);
-void bot.start({
-  onStart: (me) => console.log(`Bot @${me.username} is polling`),
-});
+await registerBotUi(bot, config.clientUrl);
+void bot.start({ onStart: (me) => console.log(`Bot @${me.username} is polling`) });
 
 async function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);

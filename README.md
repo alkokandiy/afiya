@@ -1,27 +1,41 @@
 # Afiya Market
 
-A Telegram Mini App shop: customers browse products inside Telegram, fill a cart, and the bot collects
-their name, phone and address, then forwards the order to the admins, who move it through its statuses.
+A Telegram Mini App shop for Afiya's household products. Customers browse, fill a cart and order inside
+Telegram; the family packs, delivers or hands the order over at home, and everyone is kept up to date by the bot.
 
 ```
-client/   React 19 + Vite + TypeScript Mini App
+client/   React 19 + Vite + TypeScript Mini App (customer shop + staff screens)
 server/   Express + grammY bot + SQLite, TypeScript
+shared/   Code both sides use: order rules, API types, Latin⇄Cyrillic transliteration
 ```
 
-## How it works
+## For customers
 
-1. The customer opens the shop from the bot: the `/start` keyboard button, the chat menu button, or an inline button.
-2. The client loads products and prices from `GET /api/products`.
-3. On checkout the client sends only product IDs and quantities:
-   - opened from the keyboard button → `Telegram.WebApp.sendData`, delivered to the bot as `web_app_data`;
-   - opened any other way → `POST /api/checkout`, authenticated with Telegram's signed `initData`.
-4. The server prices the cart from its own database, then continues in the chat:
-   name → phone (typed or shared contact) → address (typed or GPS) → review → confirm.
-   Returning customers go straight to the review and can change their details there.
-5. The confirmed order is saved and sent to every admin chat with status buttons
-   (Tasdiqlandi → Yetkazilmoqda → Yetkazildi, or Bekor qilindi). The customer is told about each change.
+- **Shop:** big pictures and buttons, categories, search (works in Latin or Cyrillic), "only N left" / sold-out labels.
+- **Cart** is kept on the phone, so closing Telegram doesn't lose it.
+- **Checkout on one screen:** delivery to the door or pickup from home → name, phone
+  (or "send my Telegram number"), address (or "send my location") → cash or card transfer on handover.
+  Details are remembered for next time.
+- **Buyurtmalar (my orders):** progress steps (Qabul qilindi → Tayyor → Yo'lda → Topshirildi), cancel while
+  still new, "order the same again", a call button for the shop.
+- **Lotin / Кирилл** switch in the header; the bot's messages follow the same choice.
 
-State (products, customers, checkout progress, orders) lives in SQLite, so restarts lose nothing.
+## For staff ("Ish joyi" tab — only visible to people with a role)
+
+| Screen | Who | What |
+|---|---|---|
+| 📦 Sotuvchi | seller | orders to pack → "Yig'ildi, tayyor"; pickups waiting → "Topshirildi, pul olindi" |
+| 🚚 Haydovchi | driver | ready deliveries → "Olib ketdim" → "Yetkazildi, pul olindi"; call and map buttons |
+| ⚙️ Admin | admin | report (today / 7 days, low stock, best sellers), products (photo, price, stock, Cyrillic name, show/hide), categories, all orders, staff roles, shop settings |
+
+Order flow: `new → ready → (delivering) → completed`, or `cancelled` (stock goes back). Who may press what
+is defined once in `shared/types.ts` (`TRANSITIONS`) and enforced by the server.
+
+Bot notifications: new orders to sellers and admins, ready deliveries to drivers, every status change to the
+customer, and a low-stock warning to admins.
+
+**Adding staff:** the person sends `/start` to the bot (or opens the shop once), then an admin ticks their role in
+Admin → Xodimlar. The IDs in `ADMIN_CHAT_IDS` are owners: always admin.
 
 ## Running locally
 
@@ -31,7 +45,7 @@ Telegram only opens Mini Apps over HTTPS, so the shop has to be reachable throug
 ```bash
 npm run install:all
 # server/.env holds BOT_TOKEN and ADMIN_CHAT_IDS (template: server/.env.example)
-npm run dev:client                               # Vite on :5173, forwards /api to :8000
+npm run dev:client                               # Vite on :5173, forwards /api and /uploads to :8000
 cloudflared tunnel --url http://localhost:5173   # prints an https://….trycloudflare.com URL
 # put that URL in server/.env as CLIENT_URL, then:
 npm run dev:server                               # bot + API on :8000
@@ -46,20 +60,9 @@ so tunnel port 8000 instead.
 | Variable | |
 |---|---|
 | `BOT_TOKEN` | from @BotFather |
-| `ADMIN_CHAT_IDS` | comma-separated chat IDs that receive orders and may use admin commands |
+| `ADMIN_CHAT_IDS` | comma-separated Telegram user IDs of the owners (always admin) |
 | `CLIENT_URL` | HTTPS URL of the shop; used for every web-app button |
-| `DATABASE_PATH` | SQLite file, default `./data/afiya.db` |
+| `DATA_DIR` | database (`afiya.db`) and uploaded photos (`uploads/`), default `./data` — back this folder up |
 | `PORT` | default `8000` |
 
-## Admin commands
-
-Available in the chats listed in `ADMIN_CHAT_IDS`:
-
-| Command | |
-|---|---|
-| `/orders` | last 10 orders; tap `/order_<id>` to open one with its status buttons |
-| `/products` | catalog with IDs, prices, hidden items |
-| `/price <id> <price>` | change a price, e.g. `/price 3 56000` |
-| `/hide <id>` / `/show <id>` | take a product off the shop or put it back |
-
-New products: add a row to the `products` table and an image at `client/public/img/products/<id>.webp`.
+Shop phone, pickup address and hours, delivery fee and the low-stock threshold are set in Admin → Sozlamalar.

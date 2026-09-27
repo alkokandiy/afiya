@@ -1,7 +1,8 @@
 {
   "name": "afiya",
   "private": true,
-  "description": "Afiya Market — Telegram Mini App storefront (client) + order bot (server)",
+  "type": "module",
+  "description": "Afiya Market \u2014 Telegram Mini App storefront (client) + order bot (server)",
   "scripts": {
     "install:all": "npm --prefix client install && npm --prefix server install",
     "dev:client": "npm --prefix client run dev",

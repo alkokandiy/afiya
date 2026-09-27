@@ -5,7 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // The API is always same-origin: in development through this proxy, after a build the server serves the client.
-    proxy: { "/api": "http://localhost:8000" },
+    proxy: { "/api": "http://localhost:8000", "/uploads": "http://localhost:8000" },
+    fs: { allow: [".."] }, // ../shared
     // Telegram needs HTTPS, so in development the dev server is reached through a tunnel.
     allowedHosts: [".trycloudflare.com", ".ngrok-free.app", ".ngrok.app"],
   },

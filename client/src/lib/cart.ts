@@ -1,39 +1,63 @@
-export interface Product {
-  id: number;
-  title: string;
-  price: number;
-  image: string;
-}
+import type { Product } from "../../../shared/types";
 
-export interface CartLine extends Product {
+/** What's kept in the cart: just ids and quantities. Prices always come from the current catalog. */
+export type Cart = { id: number; quantity: number }[];
+
+export interface CartLine {
+  product: Product;
   quantity: number;
 }
 
-export function addItem(cart: CartLine[], product: Product): CartLine[] {
-  return cart.some((line) => line.id === product.id)
-    ? cart.map((line) => (line.id === product.id ? { ...line, quantity: line.quantity + 1 } : line))
-    : [...cart, { ...product, quantity: 1 }];
+export const MAX_QUANTITY = 99;
+
+const maxFor = (product: Product) => Math.min(MAX_QUANTITY, product.stock ?? MAX_QUANTITY);
+
+export function quantityOf(cart: Cart, id: number): number {
+  return cart.find((item) => item.id === id)?.quantity ?? 0;
 }
 
-export function removeItem(cart: CartLine[], productId: number): CartLine[] {
-  return cart
-    .map((line) => (line.id === productId ? { ...line, quantity: line.quantity - 1 } : line))
-    .filter((line) => line.quantity > 0);
+export function setQuantity(cart: Cart, product: Product, quantity: number): Cart {
+  const clamped = Math.max(0, Math.min(quantity, maxFor(product)));
+  if (clamped === 0) return cart.filter((item) => item.id !== product.id);
+  return cart.some((item) => item.id === product.id)
+    ? cart.map((item) => (item.id === product.id ? { ...item, quantity: clamped } : item))
+    : [...cart, { id: product.id, quantity: clamped }];
 }
 
-export function quantityOf(cart: CartLine[], productId: number): number {
-  return cart.find((line) => line.id === productId)?.quantity ?? 0;
+/** Cart items that still exist in the catalog, with quantities capped to what's in stock. */
+export function cartLines(cart: Cart, products: Product[]): CartLine[] {
+  return cart.flatMap((item) => {
+    const product = products.find((p) => p.id === item.id);
+    if (!product || maxFor(product) === 0) return [];
+    return [{ product, quantity: Math.min(item.quantity, maxFor(product)) }];
+  });
 }
 
-/** Display only — the server recomputes the real total from its own prices. */
-export function totalPrice(cart: CartLine[]): number {
-  return cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
+export function cartTotal(lines: CartLine[]): number {
+  return lines.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
 }
 
-export function toCheckoutItems(cart: CartLine[]) {
-  return cart.map(({ id, quantity }) => ({ id, quantity }));
+export function cartCount(lines: CartLine[]): number {
+  return lines.reduce((sum, line) => sum + line.quantity, 0);
 }
 
-export function formatMoney(amount: number): string {
-  return `${amount.toLocaleString("en-US")} so'm`;
+const STORAGE_KEY = "afiya.cart";
+
+export function loadCart(): Cart {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => Number.isInteger(item?.id) && Number.isInteger(item?.quantity) && item.quantity > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCart(cart: Cart): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+  } catch {
+    // Storage can be unavailable (private mode); the cart just won't survive closing the app.
+  }
 }

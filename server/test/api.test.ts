@@ -1,57 +1,146 @@
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/api.js";
-import { Checkout } from "../src/checkout.js";
-import type { Store } from "../src/store.js";
-import { BOT_TOKEN, createFakeApi, createStore, signInitData } from "./helpers.js";
+import { OWNER, startTestApp } from "./helpers.js";
 
-let server: Server;
-let base: string;
-let store: Store;
+const CUSTOMER = 1;
+const SELLER = 2;
+let t: Awaited<ReturnType<typeof startTestApp>>;
 
 beforeEach(async () => {
-  store = createStore();
-  const checkout = new Checkout(store, createFakeApi().api, [1]);
-  server = createApp(store, checkout, { botToken: BOT_TOKEN }).listen(0);
-  await new Promise((resolve) => server.once("listening", resolve));
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  t = await startTestApp();
+});
+afterEach(() => t.close());
+
+const order = { items: [{ id: 1, quantity: 1 }], fulfillment: "pickup", payment: "cash", name: "Ali", phone: "901234567" };
+
+describe("public", () => {
+  it("serves the catalog without login, hiding inactive products", async () => {
+    t.store.catalog.updateProduct(5, { active: false });
+    const { json } = await t.call("GET", "/api/catalog");
+    expect(json.categories.map((c: { name: string }) => c.name)).toEqual(["Kir yuvish", "Idish yuvish", "Sovun", "Tozalash"]);
+    expect(json.products).toHaveLength(18);
+    expect(json.products[0]).toEqual({ id: 1, title: "Pushti Nexx (Extra)", titleCyr: "Пушти Некс (Экстра)", price: 70000, image: "/img/products/1.webp", categoryId: 1, stock: null });
+    expect(json.shop).toEqual({ phone: "", pickupAddress: "", pickupHours: "9:00 – 20:00", deliveryFee: 0 });
+  });
 });
 
-afterEach(() => {
-  server.close();
+describe("customer", () => {
+  it("requires Telegram login", async () => {
+    expect((await t.call("GET", "/api/me")).status).toBe(401);
+    expect((await t.call("POST", "/api/orders", { body: order })).status).toBe(401);
+  });
+
+  it("places, lists and cancels their own orders", async () => {
+    const placed = await t.call("POST", "/api/orders", { as: CUSTOMER, body: order });
+    expect(placed.status).toBe(201);
+
+    const mine = await t.call("GET", "/api/orders", { as: CUSTOMER });
+    expect(mine.json.map((o: { id: number }) => o.id)).toEqual([placed.json.id]);
+    expect((await t.call("GET", "/api/orders", { as: 99 })).json).toEqual([]);
+
+    const cancelled = await t.call("POST", `/api/orders/${placed.json.id}/status`, { as: CUSTOMER, body: { status: "cancelled" } });
+    expect(cancelled.json.status).toBe("cancelled");
+  });
+
+  it("remembers the script and the profile", async () => {
+    await t.call("POST", "/api/orders", { as: CUSTOMER, body: order });
+    await t.call("PATCH", "/api/me", { as: CUSTOMER, body: { script: "cyrl" } });
+    expect((await t.call("GET", "/api/me", { as: CUSTOMER })).json).toEqual({
+      id: CUSTOMER, name: "Ali", phone: "+998901234567", address: "", script: "cyrl", roles: [],
+    });
+  });
+
+  it("returns readable errors", async () => {
+    const res = await t.call("POST", "/api/orders", { as: CUSTOMER, body: { ...order, phone: "x" } });
+    expect(res).toMatchObject({ status: 400, json: { error: "Telefon raqam noto'g'ri." } });
+  });
 });
 
-const postCheckout = (body: unknown, auth?: string) =>
-  fetch(`${base}/api/checkout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(auth ? { Authorization: auth } : {}) },
-    body: JSON.stringify(body),
+describe("staff", () => {
+  it("keeps customers out of staff and admin endpoints", async () => {
+    await t.call("GET", "/api/me", { as: CUSTOMER });
+    expect((await t.call("GET", "/api/staff/orders?status=new", { as: CUSTOMER })).status).toBe(403);
+    expect((await t.call("GET", "/api/admin/stats", { as: CUSTOMER })).status).toBe(403);
   });
 
-describe("API", () => {
-  it("lists only active products", async () => {
-    store.setActive(5, false);
-    const products = (await (await fetch(`${base}/api/products`)).json()) as { id: number }[];
-    expect(products).toHaveLength(18);
-    expect(products.map((p) => p.id)).not.toContain(5);
-    expect(products[0]).toEqual({ id: 1, title: "Pushti Nexx (Extra)", price: 70000, image: "/img/products/1.webp" });
+  it("lets the owner make someone a seller, who then works the queue", async () => {
+    await t.call("GET", "/api/me", { as: SELLER }); // the seller opened the app once
+    const staff = await t.call("GET", "/api/admin/staff", { as: OWNER });
+    expect(staff.json.find((u: { id: number }) => u.id === OWNER)).toMatchObject({ owner: true, roles: ["admin"] });
+
+    expect((await t.call("PUT", `/api/admin/staff/${SELLER}`, { as: OWNER, body: { roles: ["seller"] } })).status).toBe(200);
+    expect((await t.call("GET", "/api/admin/stats", { as: SELLER })).status).toBe(403);
+
+    const { json: placed } = await t.call("POST", "/api/orders", { as: CUSTOMER, body: order });
+    const queue = await t.call("GET", "/api/staff/orders?status=new,ready", { as: SELLER });
+    expect(queue.json.map((o: { id: number }) => o.id)).toEqual([placed.id]);
+
+    const ready = await t.call("POST", `/api/orders/${placed.id}/status`, { as: SELLER, body: { status: "ready" } });
+    expect(ready.json.status).toBe("ready");
   });
 
-  it("rejects checkout without valid Telegram initData", async () => {
-    expect((await postCheckout({ items: [{ id: 1, quantity: 1 }] })).status).toBe(401);
-    expect((await postCheckout({ items: [{ id: 1, quantity: 1 }] }, "tma forged")).status).toBe(401);
+  it("won't let the owner lose admin", async () => {
+    await t.call("GET", "/api/me", { as: OWNER });
+    expect((await t.call("PUT", `/api/admin/staff/${OWNER}`, { as: OWNER, body: { roles: ["driver"] } })).status).toBe(400);
+  });
+});
+
+describe("admin", () => {
+  it("creates and edits products", async () => {
+    const created = await t.call("POST", "/api/admin/products", {
+      as: OWNER,
+      body: { title: "Yangi sovun", price: 11000, categoryId: 3, stock: 12, active: true },
+    });
+    expect(created.status).toBe(201);
+    const edited = await t.call("PATCH", `/api/admin/products/${created.json.id}`, { as: OWNER, body: { price: 12000, stock: 0 } });
+    expect(edited.json).toMatchObject({ price: 12000, stock: 0, title: "Yangi sovun", titleCyr: "" });
+
+    await t.call("PATCH", `/api/admin/products/1`, { as: OWNER, body: { price: 71000 } });
+    expect(t.store.catalog.getProduct(1)?.titleCyr).toBe("Пушти Некс (Экстра)"); // not wiped by a partial edit
+
+    const bad = await t.call("PATCH", `/api/admin/products/${created.json.id}`, { as: OWNER, body: { price: -1 } });
+    expect(bad.status).toBe(400);
   });
 
-  it("starts checkout for the signed-in user", async () => {
-    const res = await postCheckout({ items: [{ id: 1, quantity: 2 }] }, `tma ${signInitData({ id: 55 })}`);
-    expect(res.status).toBe(200);
-    expect(store.getSession(55)).toMatchObject({ step: "name", items: [{ id: 1, quantity: 2 }] });
+  it("uploads product photos and replaces the old one", async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    const first = await t.call("PUT", "/api/admin/products/2/image", { as: OWNER, raw: jpeg, type: "image/jpeg" });
+    expect(first.json.image).toMatch(/^\/uploads\/product-2-\d+\.jpg$/);
+
+    const served = await fetch(t.base + first.json.image);
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(jpeg);
+
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await t.call("PUT", "/api/admin/products/2/image", { as: OWNER, raw: jpeg, type: "image/jpeg" });
+    expect(fs.readdirSync(t.uploadsDir)).toEqual([path.basename(second.json.image)]);
+
+    const notImage = await t.call("PUT", "/api/admin/products/2/image", { as: OWNER, raw: Buffer.from("hello"), type: "image/png" });
+    expect(notImage.status).toBe(400);
   });
 
-  it("returns 400 with a message for bad carts", async () => {
-    const res = await postCheckout({ items: [] }, `tma ${signInitData({ id: 55 })}`);
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "Savatingiz bo'sh!" });
+  it("manages categories and settings", async () => {
+    const { json: category } = await t.call("POST", "/api/admin/categories", { as: OWNER, body: { name: "Shampun" } });
+    await t.call("PATCH", `/api/admin/categories/${category.id}`, { as: OWNER, body: { name: "Shampunlar" } });
+    expect((await t.call("GET", "/api/catalog")).json.categories.at(-1)).toEqual({ id: category.id, name: "Shampunlar" });
+
+    const settings = await t.call("PATCH", "/api/admin/settings", { as: OWNER, body: { deliveryFee: 15000, phone: "+998 90 000 00 00" } });
+    expect(settings.json).toMatchObject({ deliveryFee: 15000, phone: "+998 90 000 00 00" });
+    expect((await t.call("GET", "/api/catalog")).json.shop.deliveryFee).toBe(15000);
+  });
+
+  it("reports stats", async () => {
+    t.store.catalog.updateProduct(1, { stock: 3 });
+    const { json: placed } = await t.call("POST", "/api/orders", { as: CUSTOMER, body: order });
+    await t.call("POST", `/api/orders/${placed.id}/status`, { as: OWNER, body: { status: "ready" } });
+    await t.call("POST", `/api/orders/${placed.id}/status`, { as: OWNER, body: { status: "completed" } });
+
+    const { json } = await t.call("GET", "/api/admin/stats", { as: OWNER });
+    expect(json).toMatchObject({
+      today: { orders: 1, revenue: 70000 },
+      open: { new: 0, ready: 0, delivering: 0 },
+      topProducts: [{ title: "Pushti Nexx (Extra)", titleCyr: "Пушти Некс (Экстра)", quantity: 1 }],
+      lowStock: [{ id: 1, title: "Pushti Nexx (Extra)", titleCyr: "Пушти Некс (Экстра)", stock: 2 }],
+    });
   });
 });
